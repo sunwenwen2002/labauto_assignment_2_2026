@@ -16,7 +16,7 @@ The crane is considered as a pendulum and therefore as a second-order system.
 
 The coefficients of each create_filter are calculated based on the following pendulum properties:
 - Natural frequency of the pendulum (sqrt(g/L) based on the gravity and the pendulum length)
-- Damped system, decay ratio = TODO
+- Damped system, damping ratio = XI
 '''
 
 
@@ -31,9 +31,12 @@ class InputShaperFilter:
 
     L_PENDULUM = 0.736167857808297
     GRAVITY = 9.81
+    XI = 0.01
 
-    omega = math.sqrt(GRAVITY / L_PENDULUM)
-    T = 2 * math.pi / omega
+    omega_n = math.sqrt(GRAVITY / L_PENDULUM)
+    omega_d = omega_n * math.sqrt(1 - XI**2)
+    T = 2 * math.pi / omega_d
+    K = math.exp(-XI * math.pi / math.sqrt(1 - XI**2))
 
     def __init__(self, Tc, filter_type, initial_reference=None, tolerance=0.05):
         self.Tc = Tc
@@ -67,28 +70,40 @@ class InputShaperFilter:
             raise ValueError("Unknown input shaper filter type.")
 
     def ZV(self):
-        amplitude = [0.5, 0.5]
+        amplitude = [
+            1 / (1 + self.K),
+            self.K / (1 + self.K),
+        ]
         delay = [0.0, self.T / 2]
 
         self.create_filter(amplitude, delay)
 
     def ZVD(self):
-        amplitude = [0.25, 0.50, 0.25]
+        amplitude = [
+            1 / (1 + self.K)**2,
+            2 * self.K / (1 + self.K)**2,
+            self.K**2 / (1 + self.K)**2,
+        ]
         delay = [0.0, self.T / 2, self.T]
 
         self.create_filter(amplitude, delay)
 
     def ZVDD(self):
-        amplitude = [0.125, 0.375, 0.375, 0.125]
+        amplitude = [
+            1 / (1 + self.K)**3,
+            3 * self.K / (1 + self.K)**3,
+            3 * self.K**2 / (1 + self.K)**3,
+            self.K**3 / (1 + self.K)**3,
+        ]
         delay = [0.0, self.T / 2, self.T, 1.5 * self.T]
 
         self.create_filter(amplitude, delay)
 
     def EI(self, tolerance=0.05):
         # EI coefficients with 5% residual vibration
-        a1 = (1 + tolerance) / 4
-        a2 = 1 - 2 * a1
-        a3 = a1
+        a1 = (1 + tolerance) / (1 + self.K)**2
+        a2 = 2 * self.K * (1 - tolerance) / (1 + self.K)**2
+        a3 = self.K**2 * (1 + tolerance) / (1 + self.K)**2
 
         amplitude = [a1, a2, a3]
         delay = [0.0, self.T / 2, self.T]
