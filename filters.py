@@ -36,7 +36,7 @@ class InputShaperFilter:
     omega_n = math.sqrt(GRAVITY / L_PENDULUM)
     omega_d = omega_n * math.sqrt(1 - XI**2)
     T = 2 * math.pi / omega_d
-    K = math.exp(-XI * math.pi / math.sqrt(1 - XI**2))
+    K = math.exp((-XI * math.pi) / math.sqrt(1 - XI**2))
 
     def __init__(self, Tc, filter_type, initial_reference=None, tolerance=0.05):
         self.Tc = Tc
