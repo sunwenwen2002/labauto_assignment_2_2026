@@ -13,7 +13,7 @@ from labauto import TrapezoidalMotionLaw
 from labauto import loadController
 from labauto import loadInstructions
 
-from filters import ZV, EI, ZVD, ZVDD
+from filters import InputShaperFilter, ShaperType
 
 model_name = "crane"  # folder containing model.xml + control_config.yaml + motion program
 program_name = "test_trj1"
@@ -52,7 +52,7 @@ Dq0 = measured_output[dof:]
 DDq0 = np.zeros(dof)
 initial_reference = np.concatenate((q0, Dq0, DDq0))
 
-input_shaper = ZVD(Tc=Tc, initial_reference=initial_reference)
+input_shaper = InputShaperFilter(Tc=Tc, filter_type=ShaperType.ZVDD, initial_reference=initial_reference)
 
 # Define the Motion Law
 max_Dq = np.array([5.5]*dof)
@@ -90,7 +90,7 @@ while ml.depending_instructions():
 
     reference = np.array([target_q_is, target_Dq_is, target_DDq_is])
     # New reference after input shaping
-    reference = input_shaper(reference)
+    reference = input_shaper.filter(reference)
     measured_output = robot.read_sensor_value()
 
     # Controller computes desired actuator force (N) for the 3 motor actuators

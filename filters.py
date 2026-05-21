@@ -1,10 +1,10 @@
 import math
+from enum import Enum
 
 import numpy as np
 
 '''
-This file contains the implementation of the input shapers that can be used in robot_simulation.py.
-The create_filters are implemented as single functions that return a function (the actual create_filter) that can be used as input_shaper.
+This file contains the implementation of the input shaper class that can be used in robot_simulation.py.
 
 The input shapers here implemented are:
 - ZV: Zero Vibration shaper
@@ -16,95 +16,113 @@ The crane is considered as a pendulum and therefore as a second-order system.
 
 The coefficients of each create_filter are calculated based on the following pendulum properties:
 - Natural frequency of the pendulum (sqrt(g/L) based on the gravity and the pendulum length)
-- Undamped system, decay ratio = 1  (damping="0.0" in the model.xml)
+- Damped system, decay ratio = TODO
 '''
 
-# Data taken from the crane/model.xml model
-L_PENDULUM = 0.736167857808297
-GRAVITY = 9.81
+
+class ShaperType(Enum):
+    ZV = "ZV"
+    ZVD = "ZVD"
+    ZVDD = "ZVDD"
+    EI = "EI"
 
 
-def ZV(Tc, initial_reference=None):
+class InputShaperFilter:
+
+    L_PENDULUM = 0.736167857808297
+    GRAVITY = 9.81
+
     omega = math.sqrt(GRAVITY / L_PENDULUM)
     T = 2 * math.pi / omega
 
-    # create_filter parameters
-    amplitude = [0.5, 0.5]
-    delay = [0.0, T / 2]
+    def __init__(self, Tc, filter_type, initial_reference=None, tolerance=0.05):
+        self.Tc = Tc
+        self.filter_type = filter_type
 
-    return create_filter(amplitude, delay, Tc, initial_reference)
+        if initial_reference is None:
+            initial_reference = np.zeros(3)
 
+        self.initial_reference = np.array(initial_reference, dtype=float)
 
-def ZVD(Tc, initial_reference=None):
-    omega = math.sqrt(GRAVITY / L_PENDULUM)
-    T = 2 * math.pi / omega
+        # Parameters to be set later based on the chosen filter.
+        self.amplitude = []
+        self.delay = []
+        self.sample_delay = []
+        self.memory = []
+
+        # Set the filter based on the chosen type.
+        self.set_filter(filter_type, tolerance)
+
+    def set_filter(self, filter_type, tolerance=0.05):
+        # Create the filter based on the chosen type.
+        if filter_type == ShaperType.ZV:
+            self.ZV()
+        elif filter_type == ShaperType.ZVD:
+            self.ZVD()
+        elif filter_type == ShaperType.ZVDD:
+            self.ZVDD()
+        elif filter_type == ShaperType.EI:
+            self.EI(tolerance)
+        else:
+            raise ValueError("Unknown input shaper filter type.")
+
+    def ZV(self):
+        amplitude = [0.5, 0.5]
+        delay = [0.0, self.T / 2]
+
+        self.create_filter(amplitude, delay)
+
+    def ZVD(self):
+        amplitude = [0.25, 0.50, 0.25]
+        delay = [0.0, self.T / 2, self.T]
+
+        self.create_filter(amplitude, delay)
+
+    def ZVDD(self):
+        amplitude = [0.125, 0.375, 0.375, 0.125]
+        delay = [0.0, self.T / 2, self.T, 1.5 * self.T]
+
+        self.create_filter(amplitude, delay)
+
+    def EI(self, tolerance=0.05):
+        # EI coefficients with 5% residual vibration
+        a1 = (1 + tolerance) / 4
+        a2 = 1 - 2 * a1
+        a3 = a1
+
+        amplitude = [a1, a2, a3]
+        delay = [0.0, self.T / 2, self.T]
+
+        self.create_filter(amplitude, delay)
     
-    # create_filter parameters
-    amplitude = [0.25, 0.50, 0.25]
-    delay = [0.0, T / 2, T]
+    def create_filter(self, amplitude, delay):
+        self.amplitude = amplitude
+        self.delay = delay
 
-    return create_filter(amplitude, delay, Tc, initial_reference)
+        # Convert delays from seconds to an integer number of samples.
+        self.sample_delay = [int(round(delay / self.Tc)) for delay in self.delay]
 
+        # The create_filter memory must be long enough to contain the oldest sample
+        # needed to compute the create_filtered reference.
+        memory_length = max(self.sample_delay) + 1
 
-def ZVDD(Tc, initial_reference=None):
-    omega = math.sqrt(GRAVITY / L_PENDULUM)
-    T = 2 * math.pi / omega
+        # Convert to numpy array and initialize the create_filter memory.
+        # At the beginning, all memory samples are set equal to the initial reference.
+        self.memory = [self.initial_reference.copy() for _ in range(memory_length)]
 
-    # create_filter parameters
-    amplitude = [0.125, 0.375, 0.375, 0.125]
-    delay = [0.0, T / 2, T, 1.5 * T]
-
-    return create_filter(amplitude, delay, Tc, initial_reference)
-
-
-def EI(Tc, initial_reference=None, tollerance=0.05):
-    omega = math.sqrt(GRAVITY / L_PENDULUM)
-    T = 2 * math.pi / omega
-
-    # EI coefficients with 5% residual vibration
-    a1 = (1 + tollerance) / 4
-    a2 = 1 - 2 * a1
-    a3 = a1
-
-    # create_filter parameters
-    amplitude = [a1, a2, a3]
-    delay = [0.0, T / 2, T]
-
-    return create_filter(amplitude, delay, Tc, initial_reference)
-
-
-def create_filter(amplitude, delay, Tc, initial_reference=None):
-    # Convert delays from seconds to an integer number of samples.
-    sample_delay = [int(round(delay / Tc)) for delay in delay]
-
-    # The create_filter memory must be long enough to contain the oldest sample
-    # needed to compute the create_filtered reference.
-    memory_length = max(sample_delay) + 1
-
-    if initial_reference is None:
-        initial_reference = np.zeros(3)
-
-    # Convert to numpy array and initialize the create_filter memory.
-    # At the beginning, all memory samples are set equal to the initial reference.
-    initial_reference = np.array(initial_reference, dtype=float)
-    memory = [initial_reference.copy() for _ in range(memory_length)]
-
-    # create_filter function that will then be used as input_shaper in robot_simulation.py.
-    def filter(reference):
+    def filter(self, reference):
         reference = np.array(reference, dtype=float)
 
         # Add the new reference sample to memory.
-        memory.append(reference.copy())
+        self.memory.append(reference.copy())
 
-        filtred_reference = np.zeros_like(reference)
+        filtered_reference = np.zeros_like(reference)
 
         # Compute the create_filtered reference.
-        for A, delay in zip(amplitude, sample_delay):
-            filtred_reference += A * memory[-1 - delay]
+        for A, delay in zip(self.amplitude, self.sample_delay):
+            filtered_reference += A * self.memory[-1 - delay]
 
         # Remove the oldest sample to keep the memory at the desired length.
-        memory.pop(0)
+        self.memory.pop(0)
 
-        return filtred_reference
-
-    return filter
+        return filtered_reference
