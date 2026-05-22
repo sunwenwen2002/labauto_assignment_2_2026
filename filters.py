@@ -31,7 +31,7 @@ class InputShaperFilter:
 
     L_PENDULUM = 0.736167857808297
     GRAVITY = 9.81
-    XI = 0.01
+    XI = 3.2090757462851513e-06 # Damping ratio estimated from the impulse response of the system.
 
     omega_n = math.sqrt(GRAVITY / L_PENDULUM)
     omega_d = omega_n * math.sqrt(1 - XI**2)
