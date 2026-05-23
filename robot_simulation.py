@@ -13,7 +13,7 @@ from labauto import TrapezoidalMotionLaw
 from labauto import loadController
 from labauto import loadInstructions
 
-from filters import InputShaperFilter, ShaperType
+from input_shaper_filter import InputShaperFilter, ShaperType
 
 model_name = "crane"  # folder containing model.xml + control_config.yaml + motion program
 program_name = "test_trj1"
