@@ -53,7 +53,7 @@ DDq0 = np.zeros(dof)
 initial_reference = np.concatenate((q0, Dq0, DDq0))
 
 # Create the input shaper filter
-input_shaper = InputShaperFilter(Tc=Tc, filter_type=ShaperType.EI, initial_reference=initial_reference)
+input_shaper = InputShaperFilter(Tc=Tc, filter_type=ShaperType.ZVD, initial_reference=initial_reference)
 
 # Define the Motion Law
 max_Dq = np.array([5.5]*dof)
